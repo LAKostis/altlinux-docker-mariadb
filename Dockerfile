@@ -8,7 +8,7 @@ RUN \
  apt-get -y clean;\
  mkdir /docker-entrypoint-initdb.d;
  
-VOLUME ["/var/lib/mysql"]
+VOLUME ["/var/lib/mysql/db"]
 
 COPY docker-entrypoint.sh /usr/local/bin/
 COPY dumps/* /docker-entrypoint-initdb.d/
