@@ -84,6 +84,7 @@ _get_config() {
 
 /usr/sbin/mysql_install_db || exit 1
 CHROOT=
+[ -n "$MYSQL_ROOT_HOST" ] || MYSQL_ROOT_HOST=$(hostname)
 
 # allow the container to be started with `--user`
 if [ "$1" = 'mysqld' -a -z "$wantHelp" -a "$(id -u)" = '0' ]; then
@@ -94,13 +95,24 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" -a "$(id -u)" = '0' ]; then
 	fi
 fi
 
+echo "$CHROOT/etc/hosts:"
+cat "$CHROOT/etc/hosts"
+
+echo 'Using the following variables:'
+echo "MYSQL_ROOT_HOST: $MYSQL_ROOT_HOST"
+
 if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 	# still need to check config, container may have started with --user
 	_check_config "$@"
 	# Get config
 	DATADIR="$CHROOT$(_get_config 'datadir' "$@")"
+        echo "DATADIR: $DATADIR"
 
-	if [ ! -d "$DATADIR/done" ]; then
+	if [ "$MYSQL_ROOT_HOST" != 'localhost' ]; then
+		control mysqld server ||:
+	fi
+
+	if [ ! -f "$DATADIR/done" ]; then
 		file_env 'MYSQL_ROOT_PASSWORD'
 		if [ -z "$MYSQL_ROOT_PASSWORD" -a -z "$MYSQL_ALLOW_EMPTY_PASSWORD" -a -z "$MYSQL_RANDOM_ROOT_PASSWORD" ]; then
 			echo >&2 'error: database is uninitialized and password option is not specified '
@@ -113,28 +125,26 @@ if [ "$1" = 'mysqld' -a -z "$wantHelp" ]; then
 			echo "GENERATED ROOT PASSWORD: $MYSQL_ROOT_PASSWORD"
 		fi
 
-		if [ ! -z "$MYSQL_ROOT_HOST" -a "$MYSQL_ROOT_HOST" != 'localhost' ]; then
-			control mysqld server ||:
-         		SOCKET="$CHROOT$(_get_config 'socket' "$@")"
-         		"$@" &
-         		pid="$!"
-         
-         		mysql=( mysql --protocol=socket -uroot -hlocalhost --socket="${SOCKET}" )
-         
-         		for i in {30..0}; do
-         			if echo 'SELECT 1' | "${mysql[@]}" &> /dev/null; then
-         				break
-         			fi
-         			echo 'MySQL init process in progress...'
-         			sleep 1
-         		done
-         		if [ "$i" = 0 ]; then
-         			echo >&2 'MySQL init process failed.'
-         			exit 1
-         		fi
-			/usr/bin/mysqladmin -u root password "$MYSQL_ROOT_PASSWORD"
-	        	/usr/bin/mysqladmin -u root -h "$MYSQL_ROOT_HOST"  password "$MYSQL_ROOT_PASSWORD"
+		SOCKET="$CHROOT$(_get_config 'socket' "$@")"
+		echo "SOCKET: $SOCKET"
+		"$@" &
+		pid="$!"
+
+		mysql=( mysql --protocol=socket -uroot -hlocalhost --socket="${SOCKET}" )
+
+		for i in {30..0}; do
+			if echo 'SELECT 1' | "${mysql[@]}" &> /dev/null; then
+				break
+			fi
+			echo 'MySQL init process in progress...'
+			sleep 1
+		done
+		if [ "$i" = 0 ]; then
+			echo >&2 'MySQL init process failed.'
+			exit 1
 		fi
+		/usr/bin/mysqladmin -u root password "$MYSQL_ROOT_PASSWORD"
+		/usr/bin/mysqladmin -u root -h "$MYSQL_ROOT_HOST"  password "$MYSQL_ROOT_PASSWORD"
 
 		mysql+=( -p"${MYSQL_ROOT_PASSWORD}" )
 
