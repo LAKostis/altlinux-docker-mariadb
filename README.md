@@ -1,4 +1,4 @@
-# altlinux-docker-mariadb
+# altlinux-mariadb-docker
 MariaDB docker image based on ALTLinux Sisyphus
 
 This is a ALTLinux specific adaptation of original Docker mysql https://hub.docker.com/_/mysql but with some cleanups and features:
